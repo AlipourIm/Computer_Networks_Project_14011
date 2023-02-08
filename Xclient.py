@@ -24,5 +24,3 @@ with socket.create_connection((hostname, 443)) as sock:
         ssock.sendall("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n".encode("ASCII"))
         buffer = ssock.recv(1024)
         print(buffer.decode("UTF-8"))   
-        ssock.close() 
-        sock.close()

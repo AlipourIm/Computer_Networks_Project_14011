@@ -11,6 +11,8 @@ server_socket = ssl.wrap_socket (server_socket,
 certfile='./keys/certificate.pem', keyfile="./keys/key.pem",
 server_side=True, ssl_version=ssl.PROTOCOL_TLS)
 
+server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)	# This solves address aleady in use issue
+
 server_socket.bind(('127.0.0.1', 443))
 server_socket.listen(5)
 
@@ -31,5 +33,5 @@ try:
 		handler_thread = threading.Thread(target=client_handler, args=(client, address))
 		handler_thread.start()
 except KeyboardInterrupt:
-	log.warning("saw keyboard interrupt")
+	log.warning("terminating server")
 	server_socket.close()
