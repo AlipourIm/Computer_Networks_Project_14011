@@ -1,8 +1,8 @@
 import socket
 import ssl
 import threading
-
 from PrettyLogger import logger_config
+
 log = logger_config("webserver")
 
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
