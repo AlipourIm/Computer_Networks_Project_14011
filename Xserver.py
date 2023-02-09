@@ -14,7 +14,7 @@ server_side=True, ssl_version=ssl.PROTOCOL_TLS)
 
 server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)	# This solves address aleady in use issue
 
-server_socket.bind(('127.0.0.1', 443))
+server_socket.bind(('localhost', 443))
 server_socket.listen(5)
 
 log.info("Server is listening on localhost:443")
