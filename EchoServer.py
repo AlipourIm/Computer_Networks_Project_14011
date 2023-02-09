@@ -1,15 +1,15 @@
 import socket
-localIP     = "127.0.0.1"
-localPort   = 8000
-bufferSize  = 1024
+import Constants
 
-bytesToSend = str.encode("Hello UDP Client")
+
+localIP     = "127.0.0.1"
+bufferSize  = 1024
 
 # Create a datagram socket: (ipv4, UDP)
 UDPServerSocket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
 
 # Bind to address and ip
-UDPServerSocket.bind((localIP, localPort))
+UDPServerSocket.bind((localIP, Constants.SERVER_PORT))
 
 print("UDP server up and listening")
 
