@@ -64,7 +64,4 @@ if __name__ == "__main__":
     xserver_handler_thread = threading.Thread(target=xserver_handler, args=(https_socket, ))
     xserver_handler_thread.start()
 
-    print("hello")
-
-
 
