@@ -8,7 +8,8 @@ localIP     = "127.0.0.1"
 UDPServerSocket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
 
 # Bind to address and ip
-UDPServerSocket.bind((localIP, Constants.SERVER_PORT))
+server_port = int(input(f"Please enter server port: "))
+UDPServerSocket.bind((localIP, server_port))
 
 print("UDP server up and listening")
 

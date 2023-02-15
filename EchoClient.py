@@ -1,8 +1,8 @@
 import socket
 import Constants
 
-
-serverAddressPort = (Constants.SERVER_DOMAIN_NAME, Constants.SERVER_PORT)
+server_port = int(input(f"Please enter server port: "))
+serverAddressPort = (Constants.SERVER_DOMAIN_NAME, server_port)
 xClientAddressPort = ("127.0.0.1", Constants.XCLIENT_UDP_PORT)
 bufferSize = 1024
 
