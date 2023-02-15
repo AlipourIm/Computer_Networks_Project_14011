@@ -9,6 +9,7 @@ import time
 log = logger_config("webserver")
 
 xserver_socket: socket.socket
+destination_lut = {}
 
 def establish_HTTPS_connection() -> socket.socket:
     global xserver_socket
@@ -37,15 +38,26 @@ def establish_HTTPS_connection() -> socket.socket:
             sleep_time *= 2
 
 def client_handler():
-    global xserver_socket
+    global xserver_socket, destination_lut
     UDP_server_socket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
     UDP_server_socket.bind(("localhost", Constants.XCLIENT_UDP_PORT))
+    
     
     while True:
         bytes_address_pair = UDP_server_socket.recvfrom(Constants.BUFFER_SIZE)
         message = bytes_address_pair[0].decode("ascii")
-        https_message = f"PUT / HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/zip\r\nContent-Length: {len(message)}\r\n\r\n{message}"
-        xserver_socket.sendall(https_message.encode("ascii"))
+
+        if message[0:4] == "\0\0\0\0":
+            _, server_address, server_port = message.split("\0\0\0\0", maxsplit=2)
+            client_address, client_port = bytes_address_pair[1]
+            destination_lut[client_port] = (server_address, server_port)
+            https_message = f"GET / HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/zip\r\nContent-Length: {len(message)}\r\n\r\n{client_port}\r\n\r\n{destination_lut[client_port][0]}\r\n\r\n{destination_lut[client_port][1]}\r\n\r\n{message}"
+            xserver_socket.sendall(https_message.encode("ascii"))
+            log.info(f"client with {client_address}:{client_port} wants to connect to {server_address}:{server_port}.")
+        else:
+            client_port = bytes_address_pair[1][1]
+            https_message = f"PUT / HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/zip\r\nContent-Length: {len(message)}\r\n\r\n{client_port}\r\n\r\n{destination_lut[client_port][0]}\r\n\r\n{destination_lut[client_port][1]}\r\n\r\n{message}"
+            xserver_socket.sendall(https_message.encode("ascii"))
 
 
 def xserver_handler():

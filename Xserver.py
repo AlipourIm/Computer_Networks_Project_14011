@@ -11,6 +11,8 @@ log = logger_config("webserver")
 
 xclient_socket: socket.socket
 UDP_socket: socket.socket
+destination_lut = {}
+UDP_socket_lut = {}
 
 def xclient_handler(client, address):
 	log.info(f"Client with address {address} connected.")
@@ -20,14 +22,26 @@ def xclient_handler(client, address):
 			buffer = client.recv(Constants.BUFFER_SIZE).decode("ascii")
 			log.info(f"message from xclient: {buffer.encode('ascii')}")
 
-			arr = buffer.split("\r\n\r\n", maxsplit=1)
+			arr = buffer.split("\r\n\r\n", maxsplit=4)
 			https_header = arr[0]
-			UDP_message = arr[1]
+			client_port = int(arr[1])
+			server_address = arr[2]
+			server_port = int(arr[3])
+			UDP_message = arr[4]
 
-			# Send to server using created UDP socket
-			bytesToSend = str.encode(UDP_message)
-			UDP_socket.sendto(bytesToSend, ("127.0.0.1", Constants.SERVER_PORT))
-			
+			if https_header[0:3] == "GET":
+				UDP_server_socket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
+				UDP_socket_lut[client_port] = UDP_server_socket
+				destination_lut[client_port] = (server_address, server_port)
+
+				# This thread listens on UDP_server_socket and forwards incomming packets to XCLIENT after adding header
+				server_handler_thread = threading.Thread(target=server_handler, args=(UDP_server_socket, ))
+				server_handler_thread.start()
+			elif https_header[0:3] == "PUT":
+				# Send to server using created UDP socket
+				bytesToSend = str.encode(UDP_message)
+				UDP_socket_lut[client_port].sendto(bytesToSend, (server_address, server_port))
+				
 	except KeyboardInterrupt or IndexError:
 		client.close()
 		log.info(f"Client with address {address} disconnected.")
@@ -61,14 +75,14 @@ def https_client_handler(https_socket: socket.socket):
 		log.warning("terminating server")
 		https_socket.close()
 
-def server_handler():
-	global xclient_socket, UDP_socket
-	UDP_server_socket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
-	UDP_server_socket.bind(("localhost", Constants.XSERVER_UDP_PORT))
-	UDP_socket = UDP_server_socket
+def server_handler(UDP_socket):
+	global xclient_socket
+	# UDP_server_socket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
+	# UDP_server_socket.bind(("localhost", xserver_UDP_port))
+	# UDP_socket = UDP_server_socket
     
 	while True:
-		bytes_address_pair = UDP_server_socket.recvfrom(Constants.BUFFER_SIZE)
+		bytes_address_pair = UDP_socket.recvfrom(Constants.BUFFER_SIZE)
 		message = bytes_address_pair[0].decode("ascii")
 		https_message = f"HTTP/1.1 200 OK\r\nDate: {formatdate(timeval=None, localtime=False, usegmt=True)}\
 		\r\nContent-Type: application/zip\r\nContent-Length: {len(message)}\r\n\r\n{message}"
@@ -81,7 +95,3 @@ if __name__ == "__main__":
 	# This thread reads from HTTPS socket and forwards incomming packets to SERVER_PORT after removing custom header
 	xclient_handler_thread = threading.Thread(target=https_client_handler, args=(https_socket, ))
 	xclient_handler_thread.start()
-
-	# This thread listens on XSERVER_UDP_PORT and forwards incomming packets to XCLIENT after adding header
-	server_handler_thread = threading.Thread(target=server_handler, args=())
-	server_handler_thread.start()
