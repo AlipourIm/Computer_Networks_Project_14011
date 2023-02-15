@@ -70,13 +70,14 @@ def xserver_handler():
             buffer = xserver_socket.recv(Constants.BUFFER_SIZE).decode("ascii")
             log.info(f"message from xserver: {buffer.encode('ascii')}")
 
-            arr = buffer.split("\r\n\r\n", maxsplit=1)
+            arr = buffer.split("\r\n\r\n", maxsplit=2)
             https_header = arr[0]
-            UDP_message = arr[1]
+            client_port = int(arr[1])
+            UDP_message = arr[2]
 
 			# Send to client using created UDP socket
             bytesToSend = str.encode(UDP_message)
-            UDP_client_socket.sendto(bytesToSend, ("127.0.0.1", Constants.CLIENT_PORT))
+            UDP_client_socket.sendto(bytesToSend, ("127.0.0.1", client_port))
 			
     except KeyboardInterrupt:
         UDP_client_socket.close()
