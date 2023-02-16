@@ -77,9 +77,6 @@ def https_client_handler(https_socket: socket.socket):
 
 def server_handler(client_port):
 	global xclient_socket
-	# UDP_server_socket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
-	# UDP_server_socket.bind(("localhost", xserver_UDP_port))
-	# UDP_socket = UDP_server_socket
 	UDP_socket = UDP_socket_lut[client_port]
     
 	while True:

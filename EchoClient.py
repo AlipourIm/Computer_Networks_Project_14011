@@ -8,7 +8,6 @@ bufferSize = 1024
 
 # Create a UDP socket at client side, (ipv4, UDP)
 UDPClientSocket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
-# UDPClientSocket.bind(("127.0.0.1", Constants.CLIENT_PORT))
 
 # Initial message
 UDPClientSocket.sendto(f"\0\0\0\0{serverAddressPort[0]}\0\0\0\0{serverAddressPort[1]}".encode("ascii"), xClientAddressPort)
