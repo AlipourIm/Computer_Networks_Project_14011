@@ -1,0 +1,653 @@
+‫
+‫% -------------------------------------------------------
+‫%  Abstract
+‫% -------------------------------------------------------
+\newif\iffigure
+\figuretrue
+
+‫\شروع{وسط‌چین}
+‫\مهم{چکیده}
+‫\پایان{وسط‌چین}
+‫\بدون‌تورفتگی
+‫در این پروژه قصد داریم تا با قرار دادن یک 
+‫\lr{Xclient} و یک \lr{Xserver} میان یک \lr{Clinet} و \lr{Server} پیام‌های رد و بدل شده میان \lr{Clinet} و \lr{Server} را به صورت درخواست‌های \lr{HTTP} نشان دهیم تا امکان تمایز آن‌ها از درخواست‌های عادی و روزمره‌ی دیگر از بین برود. در ادامه با اضافه‌کردن یک لایه امنیتی درخواست‌ها را به صورت \lr{HTTPS} می‌فرستیم تا اولا در صورت شنود پیام‌ها کسی متوجه محتوای آن‌ها نشود و همچنین اینکه کسی نتواند از ای رابط کاربری سوء استفاده کند و فقط افراد مطمئن به آن‌ها دسترسی داشته باشند و بتوانند پیام رد و بدل کنند.
+‫
+‫%\پرش‌بلند
+\بدون‌تورفتگی \مهم{واژه‌های کلیدی}: \lr{Client, Server, TLS, UDP, TCP}
+‫%\صفحه‌جدید
+‫
+‫\صفحه‌جدید
+‫
+‫\section{مقدمه}
+‫
+‫در دنیای روزمره‌ی امروزی سطح حریم خصوصی کاربران وب بسیار پایین آمده است، همچنین برخی از تشکیلات تلاش می‌کنند توانایی استفاده‌ی افراد از اینترنت را محدود و کنترل کنند، این مسئله علاوه بر چالش‌های نقض حریم خصوصی، چالش‌های دیگری همچون عدم دسترسی به برخی از محتوای آزاد در سطح وب را از بین می‌برد، برای گذر از این مشکل انسان‌ها از \lr{VPN} یا \lr{Virtual Private Network}ها استفاده می‌کنند، اما پروتکل‌های موجود عموما قابل تشخیص و جلوگیری هستند، یک روش حل این مشکل مخفی‌سازی پکت‌ها به گونه‌ای است که قابل تشخیص نباشند، این ایده به \lr{Obfuscation} نیز معروف است.
+‫
+‫روشی که در این پروژه قصد پیاده‌سازی آن را داریم نیز از همین ایده بهره می‌گیرد و قصد داریم ارتباط بین یک \lr{Clinet} و \lr{Server} را به گونه‌ای مخفی کنیم و ترافیک عبوری را مانند ترافیک عادی اینترنت در قالب درخواست‌های \lr{HTTP} مخفی می‌کنیم.
+‫
+‫\section{توپولوژی مسئله}
+‫در این پروژه از توپولوژی گفته شده در داک استفاده می‌کنیم به این نحو که یک \lr{Clinet} و \lr{Server} داریم که \lr{Clinet} از طریق \lr{XClinet} به یک \lr{XServer} وصل است و بسته‌هایش را به آن می‌فرستد، \lr{XClinet} در ادامه بسته‌ها را در درون یک درخواست \lr{HTTP} قرار می‌دهد و به \lr{XServer} ارسال می‌کند، \lr{XServer} پس از دریافت بسته‌ها، محتوای آن‌ها را از درون درخواست \lr{HTTP} خارج ساخته و به \lr{Server} تحویل می‌دهد، به همین نحو پاسخ \lr{Server} به \lr{Client} باز می‌گردد. توپولوژی مسئله را میتوانید در شکل ~\رجوع{topology} مشاهده کنید.
+‫
+‫\شروع{شکل}[ht]
+\centerimg{topology.png}{15.5cm}
+‫\شرح{توپولوژی مسئله که متشکل از یک 
+‫\lr{Xclient} و یک \lr{Xserver}\\ میان یک \lr{Clinet} و \lr{Server} است.}
+‫\برچسب{topology}
+‫\پایان{شکل}
+‫
+‫\section{ایجاد \lr{Certificate} برای اتصال \lr{TLS}}
+‫برای اتصال \lr{TLS} نیاز به یک \lr{Certificate}، یک فایل کلید خصوصی و یک فایل امضای دیجیتالی داریم.~\مرجع{ssl} 
+‫برای ایجاد این فایل‌ها از پکیج \lr{openssl}  استفاده می‌کنیم، این کتابخانه به صورت پیش‌فرض روی لینوکس وجود دارد اما در صورت عدم وجود می‌توان با استفاده از دستورهای زیر آن را نصب کرد.
+‫
+\begin{latin}
+\begin{lstlisting}[language=bash]
+ sudo apt-get update
+ sudo apt-get install openssl
+\end{lstlisting}
+\end{latin}
+
+‫در ادامه با استفاده از این پکیج ابتدا فایل کلید خصوصی را ایجاد می‌کنیم.
+‫
+\begin{latin}
+\begin{lstlisting}[language=bash]
+ openssl genrsa -out key.pem 2048
+\end{lstlisting}
+\end{latin}
+
+‫خروجی این دستور یک فایل با محتوای زیر است:
+‫
+\begin{latin}
+\begin{lstlisting}[language=bash]
+-----BEGIN RSA PRIVATE KEY-----
+MIIEpAIBAAKCAQEArdRVmzX53cVpXQwvJDKbLrcA4peNXvamEQKVbuyu91W/XJ2c
+MRgD4EQgQsDM3/bWl5IRDwcfcRaZ1USLmpoUekj6AIOi+yCOgbvjH3RIz5SREc0I
+JuGgLUxe8uZdyYzstK/Mg6iqgDfEWmFzuiUTlitmZYH3oRs9WhJ3MAuLgRMC9J9E @\\\hspace*{4em}\large\vdots \setcounter{lstnumber}{22}@
+2DuiE7tt253fNg2gynH5Aygfz8JiMXS3u6k4vucnLUyP632uiqLZgHp+IRguIZt5
+Vu+ZnQKBgQDKDTAw3di/lQKw6g8O/lx2Fd2VOtqD2+qsmb3Wo1L9GFyfE5PICVuL
+u3hkfEKQr5qSMPZy42HL3agHZuCHCWNKpcBRtlUiJv6JXWSj+d7bPn2GZ9O2rZ4j
+1SMuDnaZE5G5rqKwa/HCFieYzJMnOopHWLgxqIFdtwx+kl/hGB0iJA==
+-----END RSA PRIVATE KEY-----
+
+\end{lstlisting}
+\end{latin}
+
+‫حال باید یک درخواست \lr{certificate} بسازیم و آن را با کلید ساخته شده رمز کنیم، برای این کار از دستور زیر استفاده می‌کنیم:
+‫
+\begin{latin}
+\begin{lstlisting}[language=bash]
+ openssl req -new -key key.pem -out signreq.csr
+\end{lstlisting}
+\end{latin}
+
+‫در این مرحله از ما اطلاعاتی خواسته می‌شود که آن‌ها را به عنوان ورودی تحویل می‌دهیم.
+‫
+‫خروجی این بخش فایل زیر است:
+\begin{latin}
+\begin{lstlisting}[language=bash]
+-----BEGIN CERTIFICATE REQUEST-----
+MIIDFTCCAf0CAQAwgZwxCzAJBgNVBAYTAklSMQ8wDQYDVQQIDAZUZWhyYW4xDzAN
+BgNVBAcMBlRlaHJhbjEPMA0GA1UECgwGU2hhcmlmMR0wGwYDVQQLDBRDb21wdXRl
+ciBFbmdpbmVlcmluZzESMBAGA1UEAwwJbG9jYWxob3N0MScwJQYJKoZIhvcNAQkB@\\\hspace*{4em}\large\vdots \setcounter{lstnumber}{14}@
+xS8rgfnaybqI0sBGdUSi0eIN2WQ6N9lvdl22FkwAyh4WFd355bKh5dMrdfx0ig5j
+anZysHL/lD5WNscAE9o29aDAEbI7RD+kuV1aGJ7u5q5FjVhqBnGbU2EzIxAdFwVR
+qBb7FVvwwLI/EoxN5K1809YJ1NFrU/eVU04hH8oSlj74DjRJjr4Sckg4RXI+6r+I
+xX1BPXJWyK9O34dMUzep7nhoE6GqtESAyQ==
+-----END CERTIFICATE REQUEST-----
+\end{lstlisting}
+\end{latin}
+‫
+‫در مرحله‌ی بعد باید درخواست \lr{certificate} را با استفاده از همان کلید، امضا کنیم، خروجی این بخش یک \lr{certificate} است که برای مدت مشخص شده معتبر است. این کار را با دستور زیر انجام می‌دهیم:
+‫
+‫
+\begin{latin}
+\begin{lstlisting}[language=bash]
+ openssl x509 -req -days 365 -in signreq.csr -signkey key.pem -out certificate.pem
+\end{lstlisting}
+\end{latin}
+
+‫در واقع یک فایل \lr{certificate} معتبر برای ۳۶۵ روز خروجی این بخش است.
+‫خروجی این بخش در حالت عادی اطلاعات زیر است:
+‫
+\begin{latin}
+\begin{lstlisting}[language=bash]
+-----BEGIN CERTIFICATE-----
+MIIDwTCCAqkCFC9i/gPjqA7VUusySQo59mxY1DYyMA0GCSqGSIb3DQEBCwUAMIGc
+MQswCQYDVQQGEwJJUjEPMA0GA1UECAwGVGVocmFuMQ8wDQYDVQQHDAZUZWhyYW4x
+DzANBgNVBAoMBlNoYXJpZjEdMBsGA1UECwwUQ29tcHV0ZXIgRW5naW5lZXJpbmcx@\\\hspace*{4em}\large\vdots \setcounter{lstnumber}{18}@
+QPRlptq411fq0AKTzxuNzFblGxmCYP32l3DP1w8jGqZABRpRYuZ+NEqzroWygzu1
+YJxfX1TXpYPXHbWP8oA1CLDnCIEcwtbnZFUgHlmVzggO9mUgjIqulr1avR8SO9LR
+D/3ziAbf9a8kX3rP712n5hMaSfnugcQWi+kQg0l58HmkTAbYe0DSK449yrzFZRcI
+WD7xzHk=
+-----END CERTIFICATE-----
+\end{lstlisting}
+\end{latin}
+
+‫اما اگر از دستور زیر استفاده کنیم می‌توانیم خروجی‌های قابل فهمی را ببنیم.
+‫
+\begin{latin}
+\begin{lstlisting}[language=bash]
+ openssl x509 -text -noout -in certificate.pem
+\end{lstlisting}
+\end{latin}
+
+توجه کنید برای این کار به کلید مخفی‌ای که در ابتدا تولید کردیم نیاز داریم و هرکسی آن را ندارد و امکان خواندن این فایل را نیز نخواهد داشت.
+
+\begin{latin}
+\begin{lstlisting}[language=bash]
+Certificate:
+    Data:
+        Version: 1 (0x0)
+        Serial Number:
+            3f:08:79:11:11:97:4e:a8:e9:75:f6:db:b5:6c:c3:da:37:0f:ad:d1
+        Signature Algorithm: sha256WithRSAEncryption
+        Issuer: C = IR, ST = Tehran, L = Tehran, O = Sharif, OU = Computer Engineering, CN = localhost, emailAddress = mahdavifar2002[at]gmail.com
+        Validity
+            Not Before: Feb 11 19:38:51 2023 GMT
+            Not After : Feb 11 19:38:51 2024 GMT
+        Subject: C = IR, ST = Tehran, L = Tehran, O = Sharif, OU = Computer Engineering, CN = localhost, emailAddress = mahdavifar2002[at]gmail.com
+        Subject Public Key Info:
+            Public Key Algorithm: rsaEncryption
+                Public-Key: (2048 bit)
+                Modulus:
+                    00:ad:d4:55:9b:35:f9:dd:c5:69:5d:0c:2f:24:32:
+                    9b:2e:b7:00:e2:97:8d:5e:f6:a6:11:02:95:6e:ec:
+                    ae:f7:55:bf:5c:9d:9c:31:18:03:e0:44:20:42:c0:
+                    cc:df:f6:d6:97:92:11:0f:07:1f:71:16:99:d5:44:
+                    8b:9a:9a:14:7a:48:fa:00:83:a2:fb:20:8e:81:bb:
+                    e3:1f:74:48:cf:94:91:11:cd:08:26:e1:a0:2d:4c:
+                    5e:f2:e6:5d:c9:8c:ec:b4:af:cc:83:a8:aa:80:37:
+                    c4:5a:61:73:ba:25:13:96:2b:66:65:81:f7:a1:1b:
+                    3d:5a:12:77:30:0b:8b:81:13:02:f4:9f:44:e9:2e:
+                    de:7a:d4:5a:d2:ad:8a:60:c3:2c:08:15:48:b7:dc:
+                    de:cd:37:07:9c:96:f3:76:9d:12:38:d2:76:11:8b:
+                    70:e7:89:98:f0:f5:82:5e:fb:ed:d7:18:eb:2d:ab:
+                    8e:74:62:15:da:5f:13:43:6c:af:d2:d7:b2:90:b9:
+                    c1:36:1b:43:62:32:e7:a4:6e:b1:5f:da:fd:b3:9a:
+                    8d:13:d0:dd:5b:e5:29:3a:b7:c6:fe:d7:f9:e4:e3:
+                    1c:c8:ca:65:f1:2f:73:9c:67:0a:f1:29:33:2a:0e:
+                    b6:cd:1d:8d:c7:38:71:03:06:67:bf:02:9c:d2:a4:
+                    37:af
+                Exponent: 65537 (0x10001)
+    Signature Algorithm: sha256WithRSAEncryption
+    Signature Value:
+        4e:6e:95:7d:a7:77:85:f5:e0:ca:57:29:c8:a3:76:32:14:a0:
+        23:d8:29:ab:eb:00:82:2d:fe:2d:b8:10:2e:81:61:36:4b:5d:
+        05:6d:1c:7a:66:d4:b6:1a:62:97:0f:46:e5:01:1e:d0:49:0e:
+        9c:22:05:03:97:37:86:cb:23:8b:46:64:a6:2b:c0:6d:62:a8:
+        f9:53:a2:bf:92:d3:eb:c9:3f:1f:64:4f:36:4f:31:c5:75:57:
+        ca:7f:7d:be:73:3f:85:1c:f1:93:83:c5:4b:2f:73:44:32:b8:
+        61:73:db:25:d4:51:2b:aa:04:65:5b:16:11:3a:f0:0d:87:ed:
+        fe:1f:c5:21:43:9a:49:e6:72:b2:db:af:05:b8:e8:eb:c2:a6:
+        0f:a1:1c:97:95:83:62:cd:b3:50:f6:5d:7b:da:dd:10:71:d4:
+        86:95:9a:62:da:59:08:e7:1e:29:73:3e:e8:78:28:1f:00:33:
+        4f:3f:be:6a:d5:08:ba:e2:3a:e2:47:1f:83:e2:66:09:f0:57:
+        92:c4:8e:4d:68:bb:54:a3:32:91:d1:03:5e:07:dc:ad:ec:e4:
+        58:56:f8:f0:19:8b:93:22:1b:be:08:16:6f:65:1c:68:ce:9f:
+        9d:47:54:4a:3e:40:c8:1f:21:a3:9e:17:a5:90:e5:c4:0b:29:
+        03:b9:f9:fd
+\end{lstlisting}
+\end{latin}
+
+‫حال برای اتصال یک \lr{Client} به یک \lr{Server} کافی است \lr{Client} داده‌ی رمز‌شده‌ی \lr{Certificate} را داشته باشدو اینگونه این دو می‌توانند ارتباط \lr{TLS} برقرار کنند.
+‫
+‫\section{پیاده‌سازی اجزای مسئله}
+‫
+‫\subsection{ثابت‌های فایل \lr{Constants.py}}
+‫در فایل \lr{Constants.py}، ثابت‌های زیر را تعریف کردیم:
+‫
+\begin{latin}
+\begin{lstlisting}[firstnumber=1, language=Python]
+X_SERVER_DOMAIN_NAME = "localhost"
+
+XCLIENT_UDP_PORT = 7000
+XCLIENT_TCP_PORT = 6001
+
+XSERVER_TCP_PORT = 443
+
+SERVER_DOMAIN_NAME = "localhost"
+
+BUFFER_SIZE = 2048	
+\end{lstlisting}
+\end{latin}
+‫
+‫در این فایل، دامنه‌ای که 
+\lr{Xserver} 
+‫آنجا قرار دارد را در اولین خط  مشخص کرده‌ایم، همچنین پورت‌های مختلفی که اجزای کد از آن‌ها استفاده خواهند کرد را نیز همینجا تعریف کرده‌ایم تا اگر نیاز به تغییری بود در همین فایل تغییرات را اعمال کنیم. به ترتیب ابتدا پورتی که 
+\lr{Xclient}
+‫روی آن بسته‌های 
+\lr{Client}
+‫را دریافت می‌کند، سپس پورتی که 
+\lr{Xclient}
+‫بسته‌های ارسالی از 
+\lr{Xserver}
+‫را دریافت می‌کند و همچنین پورتی که 
+\lr{Xserver}
+‫روی آن بسته‌های 
+\lr{Xclient}
+‫را دریافت می‌کند و پورتی که 
+\lr{Xserver}
+‫بسته‌های ارسالی از 
+\lr{Server}
+‫را دریافت می‌کند مشخص شده‌اند. در انتها هم اندازه‌ی سایز بافر مشخص شده است. 
+‫پورت‌های \lr{Client}ها و \lr{Server} متغیر هستند و در هنگام ران شدن برنامه آن‌ها را به عنوان ورودی برنامه‌ها دریافت می‌کنیم.
+‫
+‫‫\subsection{ایجاد \lr{Xclient}}
+‫همانطور که پیش‌تر نیز بیان کردیم، وظیفه‌ی \lr{Xclient} دریافت بسته‌های ارسال شده توسط \lr{Client}، اضافه کردن هدر \lr{HTTP} به این بسته‌ها و فرستادن آن‌ها به سمت \lr{Xserver} است، همچنین در مسیر برگشت نیز بسته‌های ارسالی از سمت \lr{Xserver} را \lr{unpack} می‌کند و به سمت \lr{Client} می‌فرستد.
+‫
+\begin{latin}
+\begin{lstlisting}[firstnumber=1, language=Python]
+import socket
+import ssl
+from PrettyLogger import logger_config
+import Constants
+import threading
+import time	
+\end{lstlisting}
+\end{latin}
+
+‫برای ساخت \lr{Xclient} از کتابخانه‌های بالا استفاده می‌کنیم. کتابخانه‌ی \lr{ssl} برای برقراری ارتباط \lr{TLS} به کمک فایل‌های ساخته شده که پیش از این توضیحات آن‌ها را دادیم می‌باشد. همچنین از کتابخانه‌های \lr{socket} برای ساخت سوکت‌ها و برقراری اتصال و همچنین از کتابخانه‌ی \lr{time} برای ساخت درخواست \lr{HTTP} استفاده می‌کنیم. همچنین برای وجود مسیر دوطرفه از \lr{threading} استفاده می‌کنیم تا هر مسیر را یک ریسمان هندل کند. در نهایت از کتابخانه‌ی \lr{PrettyLogger} برای لاگ انداختن استفاده می‌کنیم.
+‫
+\begin{latin}
+\begin{lstlisting}[firstnumber=9, language=Python]
+log = logger_config("webserver")
+
+xserver_socket: socket.socket
+destination_lut = {}	
+\end{lstlisting}
+\end{latin}
+
+‫این بخش مربوط به متغیرهای \lr{global} ماست، همچنین در خط اول کانفیگ لاگر را یک کانفیگ مناسب قرار می‌دهیم تا لاگ‌‌ها زیباتر نمایش داده شوند. در این بخش یک سوکت گلوبال برای ارتباط با \lr{Xserver} داریم، علت گلوبال بودن افزایش \lr{robustness} بود تا اگر طرف دیگر خراب شود وقتی \lr{Xserver} مجددا بالا می‌آید سوکت جدید گلوبال باشد تا ترد‌های دیگر از آن استفاده کنند. \lr{destination\_lut} هم متادیتای مورد نیاز برای بازگرداندن پکت‌های دریافتی به \lr{Client} درست را در بر دارد.
+‫
+‫تابع \lr{main} کد این بخش به شکل زیر است:
+‫
+\begin{latin}
+\begin{lstlisting}[firstnumber=90, language=Python]
+if __name__ == "__main__":
+    https_socket = establish_HTTPS_connection()
+
+    # This thread listens on XCLIENT_UDP_PORT and forwards incomming packets to XSERVER after adding header
+    client_handler_thread = threading.Thread(target=client_handler, args=())
+    client_handler_thread.start()
+
+    # This thread reads from HTTPS socket and forwards incomming packets to CLIENT_PORT after removing custom header
+    xserver_handler_thread = threading.Thread(target=xserver_handler, args=())
+    xserver_handler_thread.start()
+\end{lstlisting}
+\end{latin}
+
+‫ابتدا اتصال \lr{HTTPS} برقرار می‌شود و سپس با ساخت دو ریسمان، مسیرهای مختلف بصورت همزمان کار می‌کنند.
+‫
+‫در ادامه توابع توصیف شده را بررسی خواهیم کرد.
+‫
+\begin{latin}
+\begin{lstlisting}[firstnumber=14, language=Python]
+def establish_HTTPS_connection() -> socket.socket:
+    global xserver_socket
+    sleep_time = 1
+    while True:
+        try:
+            hostname = 'localhost'
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            context.load_verify_locations("./keys/certificate.pem")
+
+            '''
+            # Use two lines below instead of line above if you don't want to check self-signed certificate 
+            context.verify_mode = ssl.CERT_NONE 
+            context.check_hostname = False
+            '''
+
+            raw_sock = socket.create_connection((hostname, 443))
+            https_socket = context.wrap_socket(raw_sock, server_hostname = Constants.X_SERVER_DOMAIN_NAME)
+            xserver_socket = https_socket
+        
+            log.info("Conected to Xserver successfully.")
+            return https_socket
+        except ConnectionRefusedError:
+            log.warning(f"Xserver is not responding... retrying in {sleep_time}")
+            time.sleep(sleep_time)
+            sleep_time *= 2
+\end{lstlisting}
+\end{latin}
+
+‫این تابع وظیفه‌ی اتصال \lr{Xclient} به \lr{Xserver} به صورت \lr{HTTPS} را فراهم می‌کند. ابتدا با استفاده از فایل \lr{Certificate} ساخته شده اتصال \lr{HTTPS} را با \lr{Xserver} برقرار می‌کند. همچنین توجه کنید اگر اتصال قطع شود با مکانیزم \lr{exponential backoff} تلاش کی‌کند تا اتصال را دوباره برقرار کند. در نهایت به این توجه کنید که برای افزایش \lr{robustness}، سوکت ایجاد شده را در یک متغیر گلوبال ذخیره می‌کند تا ترد دیگر بتواند از آن استفاده کند. (در هر دو مسیر یا باید از این سوکت بخوانیم، یا در آن بنویسیم.)
+‫
+‫
+
+
+\begin{latin}
+\begin{lstlisting}[firstnumber=40, language=Python]
+def client_handler():
+    global xserver_socket, destination_lut
+    UDP_server_socket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
+    UDP_server_socket.bind(("localhost", Constants.XCLIENT_UDP_PORT))
+    
+    
+    while True:
+        bytes_address_pair = UDP_server_socket.recvfrom(Constants.BUFFER_SIZE)
+        message = bytes_address_pair[0].decode("ascii")
+
+        if message[0:4] == "\0\0\0\0":
+            _, server_address, server_port = message.split("\0\0\0\0", maxsplit=2)
+            client_address, client_port = bytes_address_pair[1]
+            destination_lut[client_port] = (server_address, server_port)
+            https_message = f"GET / HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/zip\r\nContent-Length: {len(message)}\r\n\r\n{client_port}\r\n\r\n{destination_lut[client_port][0]}\r\n\r\n{destination_lut[client_port][1]}\r\n\r\n{message}"
+            xserver_socket.sendall(https_message.encode("ascii"))
+            log.info(f"client with {client_address}:{client_port} wants to connect to {server_address}:{server_port}.")
+        else:
+            client_port = bytes_address_pair[1][1]
+            https_message = f"PUT / HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/zip\r\nContent-Length: {len(message)}\r\n\r\n{client_port}\r\n\r\n{destination_lut[client_port][0]}\r\n\r\n{destination_lut[client_port][1]}\r\n\r\n{message}"
+            xserver_socket.sendall(https_message.encode("ascii"))
+\end{lstlisting}
+\end{latin}
+
+‫این تابع. وظیفه دارد پیام‌ها را از \lr{Client} دریافت کند و آن‌ها را در یک درخواست \lr{HTTP} قرار دهد و به سمت \lr{Xserver} بفرستد. ساختار این درخواست از جنس \lr{PUT} می‌باشد و هدرهای \lr{Host} و \lr{Content-Type} را نیز دارد، در انتها طول پیام و سپس دامنه و پورت مقصد و پورت مبدا قرار دارند و سپس خود پیام آمده است. همچنین توجه کنید اولین پیام ارسلای از طرف \lr{Client} باید پورتی که روی آن گوش می‌دهد و پورت و آدرس مقصد را در آن مشخص کند، سپس ما در یک دیکشنری این اطلاعات را برای بازگردادن پاسخ‌ها به \lr{Client} ذخیره می‌کنیم. اسم این دیکشنری \lr{destinaiton\_lut} است که یک \lr{look up table} است. درخواست‌های \lr{GET} برای پیام اول و در واقع شناسایی مبدا و مقصد و شروع یک کانکشن جدید است و پیام‌های \lr{PUT} پیام‌های عادی ارسالی از طرف \lr{Client} به سمت \lr{Server}. 
+
+
+\begin{latin}
+\begin{lstlisting}[firstnumber=63, language=Python]
+def xserver_handler():
+    global xserver_socket
+    try:
+		# Create a UDP socket at server side, (ipv4, UDP)
+        UDP_client_socket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
+
+        while True:
+            buffer = xserver_socket.recv(Constants.BUFFER_SIZE).decode("ascii")
+            log.info(f"message from xserver: {buffer.encode('ascii')}")
+
+            arr = buffer.split("\r\n\r\n", maxsplit=2)
+            https_header = arr[0]
+            client_port = int(arr[1])
+            UDP_message = arr[2]
+
+			# Send to client using created UDP socket
+            bytesToSend = str.encode(UDP_message)
+            UDP_client_socket.sendto(bytesToSend, ("127.0.0.1", client_port))
+			
+    except KeyboardInterrupt:
+        UDP_client_socket.close()
+        log.info(f"XServer disconnected.")
+    except IndexError:
+        log.info(f"connection with server failed.")
+        establish_HTTPS_connection()
+        xserver_handler()   # Keep Xserver handler thread alive
+
+\end{lstlisting}
+\end{latin}
+
+‫این تابع وظیفه دارد هدر بسته‌هایی که از سمت \lr{Xserver} آمده‌اند را حذف کند و آن‌ها را به \lr{Client} تحویل دهد. در ابتدا سوکت \lr{UDP} را ایجاد می‌کند و تلاش می کند از سوکت \lr{https} پیامی را بخواند، هرگاه پیامی را خواند، هدر آن را با استفاده از یک عملیات\lr{split} حذف می‌کند و متادیتای مورد نیاز مانند پورت مقصد را نیز از پیام دریافت می‌کند و سپس پیام را به \lr{Client} می‌فرستد. همچنین در صورت قطع شدن \lr{Xserver} تلاش میکند تا دوباره به آن متصل شود.
+‫
+‫\subsection{ایجاد \lr{Xserver}}
+‫در این بخش کدهای مربوط به \lr{Xserver} را توضیح می‌دهیم، بسیاری از کارهایی که \lr{Xclient} می‌کند را مشابها باید \lr{Xserver} نیز انجام دهد، صرفا بجای ساخت یک درخواست \lr{HTTP}، باید یک پاسخ \lr{HTTP} ایجاد کند.
+‫
+‫
+\begin{latin}
+\begin{lstlisting}[firstnumber=1, language=Python]
+import socket
+import ssl
+import threading
+from PrettyLogger import logger_config
+import Constants
+from email.utils import formatdate
+\end{lstlisting}
+\end{latin}
+‫
+‫برای ساخت \lr{Xclient} از کتابخانه‌های بالا استفاده می‌کنیم. کتابخانه‌ی \lr{ssl} برای برقراری ارتباط \lr{TLS} به کمک فایل‌های ساخته شده که پیش از این توضیحات آن‌ها را دادیم می‌باشد. همچنین از کتابخانه‌های \lr{socket} برای ساخت سوکت‌ها و برقراری اتصال و همچنین از کتابخانه‌ی \lr{email.utils} برای ساخت هدر تاریخ پاسخ \lr{HTTP} استفاده می‌کنیم. همچنین برای وجود مسیر دوطرفه از \lr{threading} استفاده می‌کنیم تا هر مسیر را یک ریسمان هندل کند. در نهایت از کتابخانه‌ی \lr{PrettyLogger} برای لاگ انداختن استفاده می‌کنیم.
+‫
+\begin{latin}
+\begin{lstlisting}[firstnumber=10, language=Python]
+log = logger_config("webserver")
+
+xclient_socket: socket.socket
+UDP_socket: socket.socket
+destination_lut = {}
+UDP_socket_lut = {}
+\end{lstlisting}
+\end{latin}
+
+‫این بخش مشابه با \lr{Xclient} برای متغیرهای گلوبال می‌باشد، در خط اول کانفیگ لاگر را مشخص کرده‌ایم، سپس مشابها برای سوکت بین \lr{Xserver} و \lr{Xclient} یک متغیر گلوبال داریم تا در صورت قطع شدن \lr{Xclient} و اتصال مجدد سوکت جدید در اختیار کل ریسمان‌ها قرار بگیرد. در ادامه دو دیشکنری گلوبال داریم که اولی متادیتای مربوط به باز گردانی پیام به \lr{Xclient} را دارد و دومی سوکت مربوط به هر \lr{Server} را نگه می‌دارد، کلید آن نیز پورت مختص \lr{Server} است.
+‫
+\begin{latin}
+\begin{lstlisting}[firstnumber=90, language=Python]
+if __name__ == "__main__":
+	https_socket = establish_https_connection()
+
+	# This thread reads from HTTPS socket and forwards incomming packets to SERVER_PORT after removing custom header
+	xclient_handler_thread = threading.Thread(target=https_client_handler, args=(https_socket, ))
+	xclient_handler_thread.start()
+\end{lstlisting}
+\end{latin}
+
+‫تابع \lr{main} برای \lr{Xserver} بسیار مشابه با تابع \lr{main} برای \lr{Xclient} است. اینجا ریسمان مربوط به مسیر رفت ایجاد می‌شود در واقع صرفا ارتباط با \lr{Xclient} برقرار می‌شود و برای مسیر برگشت به صورت جداگانه ریسمان ایجاد می‌کنیم.
+‫
+‫در ادامه توابع استفاده شده را بررسی می‌کنیم.
+‫
+\begin{latin}
+\begin{lstlisting}[firstnumber=50, language=Python]
+def establish_https_connection() -> socket.socket:
+	server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+	server_socket = ssl.wrap_socket (server_socket,
+	certfile='./keys/certificate.pem', keyfile="./keys/key.pem",
+	server_side=True, ssl_version=ssl.PROTOCOL_TLS)
+
+	server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)	# This solves address aleady in use issue
+
+	server_socket.bind(('localhost', 443))
+	server_socket.listen(5)
+
+	log.info("Server is listening on localhost:443")
+
+	return server_socket
+\end{lstlisting}
+\end{latin}
+
+‫این تابع وظیفه‌ی ایجاد اتصال \lr{HTTPS} با \lr{Xclient} را دارد. این کار را با استفاده از فایل‌های \lr{key.pem} و \lr{certificate.pem} که پیش از این ایجاد کردیم انجام می‌دهد و صحت فرستنده و گیرنده را می‌سنجد. در نهایت با \lr{bind} کردن روی این پورت، منتظر اتصال \lr{Xclient} و آمدن پکت‌ها می‌ماند.
+‫
+\begin{latin}
+\begin{lstlisting}[firstnumber=66, language=Python]
+def https_client_handler(https_socket: socket.socket):
+	global xclient_socket
+	try:
+		while True:
+			client, address = https_socket.accept()
+			xclient_socket = client
+			handler_thread = threading.Thread(target=xclient_handler, args=(client, address))
+			handler_thread.start()
+	except KeyboardInterrupt:
+		log.warning("terminating server")
+		https_socket.close()
+\end{lstlisting}
+\end{latin}
+
+‫این تابع وظیفه‌ی گوش ایستادن روی اتصال \lr{HTTPS} است، هرگاه یک \lr{Xclient} متصل شود اتصال را برقرار کرده و یک ریسمان برای آن می‌سازد تا پیام‌ها دریافتی از \lr{server} را هندل کند.
+‫
+\begin{latin}
+\begin{lstlisting}[firstnumber=17, language=Python]
+def xclient_handler(client, address):
+	log.info(f"Client with address {address} connected.")
+
+	try:
+		while True:
+			buffer = client.recv(Constants.BUFFER_SIZE).decode("ascii")
+			log.info(f"message from xclient: {buffer.encode('ascii')}")
+
+			arr = buffer.split("\r\n\r\n", maxsplit=4)
+			https_header = arr[0]
+			client_port = int(arr[1])
+			server_address = arr[2]
+			server_port = int(arr[3])
+			UDP_message = arr[4]
+
+			if https_header[0:3] == "GET":
+				UDP_server_socket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
+				UDP_socket_lut[client_port] = UDP_server_socket
+				destination_lut[client_port] = (server_address, server_port)
+
+				# This thread listens on UDP_server_socket and forwards incomming packets to XCLIENT after adding header
+				server_handler_thread = threading.Thread(target=server_handler, args=(client_port, ))
+				server_handler_thread.start()
+			elif https_header[0:3] == "PUT":
+				# Send to server using created UDP socket
+				bytesToSend = str.encode(UDP_message)
+				UDP_socket_lut[client_port].sendto(bytesToSend, (server_address, server_port))
+				
+	except KeyboardInterrupt or IndexError:
+		client.close()
+		log.info(f"Client with address {address} disconnected.")
+
+\end{lstlisting}
+\end{latin}
+‫
+‫این تابع وظیفه‌ی این را دارد که هدر پیام‌های دریافتی از \lr{Xclient} را حذف کرده و پیام را به \lr{server} بدهد. در هنگام حذف کردن هدر، متادیتای قرار داده شده در سمت \lr{Xclient} را نیز استفاده می‌کند و در جدول‌های \lr{look up} خود هم سوکت مورد نیاز برای مقصد و هم متادیتای کورد نیاز برای بازگردادن داده به \lr{Xclient} درست و همچنین قرار دادن متادیتای درست برای اینکه \lr{Xclient} بتواند به درستی بسته‌را به \lr{Client} درست منتقل کند. همچنین توجه کنید در هر پیام ارسالی از \lr{Xclient} که از جنس \lr{GET} باشد، نشانه‌ی این است که یک کلاینت جدید قصد برقراری اتصال جدید را دارد و اطلاعات مربوطه در دیکشنری‌های 
+‫\lr{look up} قرار می‌گیرند، در غیر این صورت و اگر پیام آمده از جنس \lr{PUT} باشد صرفا به سمت سرور مناسب هدایت می‌شود.
+‫
+\begin{latin}
+\begin{lstlisting}[firstnumber=78, language=Python]
+def server_handler(client_port):
+	global xclient_socket
+	UDP_socket = UDP_socket_lut[client_port]
+    
+	while True:
+		bytes_address_pair = UDP_socket.recvfrom(Constants.BUFFER_SIZE)
+		message = bytes_address_pair[0].decode("ascii")
+		https_message = f"HTTP/1.1 200 OK\r\nDate: {formatdate(timeval=None, localtime=False, usegmt=True)}\
+		\r\nContent-Type: application/zip\r\nContent-Length: {len(message)}\r\n\r\n{client_port}\r\n\r\n{message}"
+		log.info(f"message to xclient: {https_message.encode('ascii')}")
+		xclient_socket.sendall(https_message.encode("ascii"))
+\end{lstlisting}
+\end{latin}
+
+‫این تابع وظیفه دارد پیام دریافتی از \lr{server} را در قالب یک پاسخ \lr{HTTP} به \lr{Xclient} ارسال کند. پاسخ \lr{HTTP} ساخته شده، هدرهای \lr{Date}، \lr{Content-type} و \lr{Content-Length} را دارد، در انتهای پاسخ نیز پیام ارسالی از \lr{server} قرار دارد. همچنین در پیام بازگشتی \lr{port} را برای \lr{client} درست مشخص می‌کند تا امکان بازگرداندن پیام به \lr{clinet} درست وجود داشته باشد. 
+‫
+‫\subsection{تست \lr{Xclient} و \lr{Xserver}}
+‫برای نشان دادن صحت اتصال \lr{TLS} بین  \lr{Xclient} و \lr{Xserver} دامنه‌ی اتصال را تغییر می‌دهیم و کد را ران می‌کنیم. همانطور که در شکل~\رجوع{tls_fail} مشاهده می‌کنید، با تغییر دامنه‌ی \lr{Xserver} در فایل \lr{Constants.py} اتصال برقرار نمی‌شود.
+‫
+‫\شروع{شکل}[ht]
+‫\centerimg{TLS_failuare.png}{15.5cm}
+‫\شرح{عدم برقراری اتصال به علت درست نبودن دامنه‌ی \lr{Xserver}.}
+‫\برچسب{tls_fail}
+‫\پایان{شکل}
+‫
+‫با اصلاح دامنه، امکان اتصال فراهم می‌شود و همانطور که در شکل~\رجوع{tls_suc} مشاهده می‌کنید، \lr{Xclinet} و \lr{Xserver} به هم متصل می‌شوند. 
+‫\شروع{شکل}[ht]
+‫\centerimg{tls_con.png}{15.5cm}
+‫\شرح{برقراری درست اتصال بین \lr{Xserver} و \lr{Xclient}.}
+‫\برچسب{tls_suc}
+‫\پایان{شکل}
+‫
+‫\subsection{ایجاد یک \lr{Client} و \lr{Server} ساده}
+‫ما برای این پروژه یک \lr{Client} و \lr{Server} ساده طراحی کردیم و اسم آن‌‌ها را \lr{EchoClient} و \lr{EchoServer} انتخاب کردیم، همانطور که از اسم آن‌ها مشخص است، \lr{EchoClient} هر بار یک پیغام ارسال می‌کند و منتظر دریافت پاسخ از \lr{Server} باقی می‌ماند و سپس می‌تواند پیام دیگری را ارسال کند. همچنین \lr{EchoServer} پیام‌های دریافتی را به همان نحو باز می‌گرداند.
+‫
+\begin{latin}
+\begin{lstlisting}[firstnumber=1, language=Python]
+import socket
+import Constants
+
+server_port = int(input(f"Please enter server port: "))
+serverAddressPort = (Constants.SERVER_DOMAIN_NAME, server_port)
+xClientAddressPort = ("127.0.0.1", Constants.XCLIENT_UDP_PORT)
+bufferSize = 1024
+
+# Create a UDP socket at client side, (ipv4, UDP)
+UDPClientSocket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
+
+# Initial message
+UDPClientSocket.sendto(f"\0\0\0\0{serverAddressPort[0]}\0\0\0\0{serverAddressPort[1]}".encode("ascii"), xClientAddressPort)
+
+while True:
+    # Send to server using created UDP socket
+    bytesToSend = str.encode(input("Please write your message: "))
+    UDPClientSocket.sendto(bytesToSend, xClientAddressPort)
+
+    msgFromServer = UDPClientSocket.recvfrom(bufferSize)[0].decode("ascii")
+    print(f"Message from Server: {msgFromServer}")
+\end{lstlisting}
+\end{latin}
+
+‫کد بالا، کد مربوط به \lr{EchoClient} است، در ابتدا یک سوکت \lr{UDP} می‌سازد و به عنوان وروردی یک رشته می‌گیرد و برای \lr{Xclient} ارسال می‌کند. 
+‫
+‫البته فرض ما این بوده که اولین پیام پیام خاصی است و اطلاعات مربوط به مقصد را مشخص می‌کند، همچنین با پیام اول هر دوی \lr{Xclient} و \lr{Xserver} اطلاعات مربوط به این اتصال جدید و دورت‌های مبدا و مقصد و دامنه‌ی مقصد و \dots را متوجه می‌شوند. راه‌های جایگزین این روش، مشاهده و کپی کردن روش دقیق پروتکل‌‌های مختلف پروکسی بود اما ما آن را دستی پیاده‌سازی کردیم. همچنین امکان استفاده از سوکت خام و مشاهده‌ی هدرها نیز وجود داشت اما با توجه به پاسخی که در یکی از سوالات آمده بود، شکل~\رجوع{qa} ما در پیام اول به \lr{Xclinet} اعلام می‌کنیم که پورت و آدرس مقصد چیست و این متادیتا در \lr{look up table} های \lr{Xclinet} و \lr{Xserver} قرار می‌گیرد.
+‫
+\شروع{شکل}[H]
+\centerimg{qa.png}{15.5cm}
+‫\شرح{متن "دقیقا باید در پیام اول به xclient بگید که به چه پورت و ip  نهایی قرار است متصل شوید``}
+‫\برچسب{qa}
+‫\پایان{شکل}
+‫
+‫حال کد مربوط به \lr{Server} را توضیح می‌دهیم.
+‫
+\begin{latin}
+\begin{lstlisting}[firstnumber=1, language=Python]
+import socket
+import Constants
+
+
+localIP     = "127.0.0.1"
+
+# Create a datagram socket: (ipv4, UDP)
+UDPServerSocket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
+
+# Bind to address and ip
+server_port = int(input(f"Please enter server port: "))
+UDPServerSocket.bind((localIP, server_port))
+
+print("UDP server up and listening")
+
+# Listen for incoming datagrams
+while(True):
+    bytesAddressPair = UDPServerSocket.recvfrom(Constants.BUFFER_SIZE)
+
+    message = bytesAddressPair[0]
+
+    address = bytesAddressPair[1]
+
+    print(f"Message from Client: {message.decode('ascii')}")
+    print(f"Client IP Address: {address}")
+
+    # Sending a reply to client
+    UDPServerSocket.sendto(message, address)
+\end{lstlisting}
+\end{latin}
+‫
+‫کد بالا، کد مربوط به \lr{EchoServer} است، در ابتدا یک سوکت \lr{UDP} می‌سازد و سپس روی آن گوش می‌ایستد، هر پیامی که دریافت کند را نیز به فرستنده باز می‌گرداند. همچنین پورتی که روی آن کار می‌کند را به عنوان ورودی دریافت می‌کند.
+‫
+‫
+‫\subsection{تست اجرای برنامه‌ها}
+‫ابتدا یک سناریو مشابه شکل~\رجوع{topology} ایجاد می‌کنیم، در سمت چپ ترمیال مربوط به \lr{Client}، سپس ترمینال مربوط به \lr{Xclient}، سپس ترمینال مربوط به \lr{Xserver} و در نهایت در راست ترمینال مربوط به \lr{Server} قرار دارد. با استفاده از \lr{Client} یک پیام ارسال می‌کنیم، نتیجه‌ی این تست را می‌توانید در شکل~\رجوع{test1_suc} مشاهده کنید.
+‫
+‫
+‫\شروع{شکل}[H]
+\centerimg{test1.png}{15.5cm}
+‫\شرح{در این تست از سمت کلاینت، یک پیام به سمت سرور ارسال می‌شود، همانطور که مشاهده می‌کنید، لاگ‌ها درستی کارکرد کد را نشان می‌دهند.}
+‫\برچسب{test1_suc}
+‫\پایان{شکل}
+‫
+‫در تستی دیگر برای نشان دادن \lr{robustness} کدمان، ابتدا \lr{Xserver} را از کار می‌اندازیم و سپس دوباره روشن می‌کنیم و پیامی دیگر ارسال می‌کنیم، همانطور که از شکل~\رجوع{test2_suc} مشخص است، در این حالت نیز کد ما به درستی عمل می‌کند.
+‫
+‫\شروع{شکل}[H]
+\centerimg{tset2.png}{15.5cm}
+‫\شرح{در این تست پس از قطع و وصل کردن \lr{Xserver}، از سمت کلاینت یک پیام به سمت سرور ارسال می‌شود، همانطور که مشاهده می‌کنید، لاگ‌ها درستی کارکرد کد را نشان می‌دهند.}
+‫\برچسب{test2_suc}
+‫\پایان{شکل}
+‫
+‫در تستی دیگر دو سرور و کلاینت می‌سازیم و از کلاینت، به سرور خاص آن پیامی می‌فرستیم، یکی از این سرورها روی پورت ۱۲۳۴۵ و دیگری روی پورت ۵۴۳۲۱ کار می‌کند، در ابتدا هر دو کلاینت به سرور با پورت ۱۲۳۴۵ متصل هستند و در ادامه یکی از کلاینت‌ها به سرور  با پورت ۱۲۳۴۵ متصل می‌شود و دیگری به سرور با پورت ۵۴۳۲۱. نتیجه‌ی این تست را نیز می‌توانید در ادامه مشاهده کنید. شکل~\رجوع{test3_suc}، ~\رجوع{test4_suc}
+‫
+\شروع{شکل}[H]
+\centerimg{test3.png}{15.5cm}
+‫\شرح{اتصال چند کلاینت به یک سرور.}
+\برچسب{test3_suc}
+\پایان{شکل}
+
+\شروع{شکل}[H]
+\centerimg{test4.png}{15.5cm}
+‫\شرح{اتصال چند کلاینت به چند سرور مختلف.}
+\برچسب{test4_suc}
+\پایان{شکل}
+‫
+‫
+‫\section{جمع‌بندی و نتایج}
+‫در این پروژه، با استفاده از قرار دادن یک واسط میان یک \lr{Client} و \lr{Server}، موفق شدیم پیام‌های ارسالی میان آن‌ها را مخفی کنیم و تظاهر به درخواست‌های روزمره‌ی \lr{HTTP} کنیم. این ساختار را با ورودی‌های مختلف و در سناریو‌های مختلف تست کردیم و از عملکرد صحیح آن مطمئن شدیم.
+‫
+‫همچنین با ایجاد فایل‌های مورد نیاز برای ایجاد یک ارتباط \lr{TLS}، ارتباط میان \lr{Xserver} و \lr{Xclient} را به صورت امن پیاده‌سازی کردیم.
+‫
+‫درنهایت برای مشاهده‌ی ریپوی گیتهاب ما، می‌توانید به~\مرجع{code} مراجعه کنید.
